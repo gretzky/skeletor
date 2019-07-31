@@ -1,0 +1,189 @@
+#!/bin/bash
+EDITOR=""
+OS=""
+LANG=""
+LIC=""
+Y=$(tput setaf 3)
+B=$(tput setaf 4)
+G=$(tput setaf 2)
+R=$(tput setaf 1)
+N=$(tput sgr0)
+
+USAGE="
+Usage: $(basename $0) [-l <language>] [-m <license>] [project name]
+
+Command line options:
+    -l      Programming language to use
+    -L      License to use (optional, defaults to MIT)
+    -h      Print this help menu
+
+Examples:
+    Generate a python project
+        $(basename $0) -l py my-project
+
+    Use the Apache license
+        $(basename $0) -l js -m apache my-project
+"
+
+LIC_OPTS="Choose one of the following:
+- AGPL
+- Apache2.0
+- BSD2
+- BSD3
+- GPL2
+- GPL3
+- MIT (default)
+- MPL
+- Unlicense"
+
+usage() {
+    printf "%40s\n" ${Y}"${USAGE}${N}" 1>&2
+    exit 1
+}
+
+# set flags
+while getopts l:L:h opt; do
+    case $opt in
+    l)
+        LANG=${OPTARG}
+        ;;
+    L)
+        case $OPTARG in
+        apache | apache2.0 | apache-2.0) LIC="apache-2.0" ;;
+        agpl | agpl3.0 | agpl-3.0) LIC="agpl-3.0" ;;
+        bsd2 | bsd-2-clause) LIC="bsd-2-clause" ;;
+        bsd3 | bsd-3-clause) LIC="bsd-3-clause" ;;
+        gpl2 | gpl-2.0 | gpl2.0) LIC="gpl-2.0" ;;
+        gpl3 | gpl-3.0 | gpl3.0) LIC="gpl-3.0" ;;
+        mit) LIC="mit" ;;
+        mpl | mpl-2.0 | mpl2.0) LIC="mpl-2.0" ;;
+        unlicense) LIC="unlicense" ;;
+        *)
+            printf "%40s\n" ${R}"'$OPTARG'not supported. ${LIC_OPTS}${N}" 1>&2
+            exit 1
+            ;;
+        esac
+        ;;
+    h)
+        usage
+        ;;
+    \?)
+        usage
+        ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+# default license to MIT if flag not passed
+if [ ! -n "$LIC" ]; then
+    LIC="mit"
+fi
+
+# print usage if a dirname or the -l flag isnt provided
+if [ -z "${LANG}" ] || [ -z "$1" ]; then
+    usage
+fi
+
+# create the directory
+if [ -d "$1" ]; then
+    printf "%40s\n" "${B}Directory with that name already exists. Try a different name.${N}"
+    exit 1
+else
+    mkdir $1 && cd $1
+fi
+
+# create license
+touch LICENSE
+curl -s "https://api.github.com/licenses/$LIC" | jq -r '.body' >>LICENSE
+
+# create readme
+printf "# $1\n\n---\nbuilt with [skeletor](https://github.com/gretzky/skeletor) 💀" >README.md
+
+# get the default editor for gitignore
+if [ -z $EDITOR ]; then
+    EDITOR=$EDITOR
+elif command -v code &>/dev/null; then
+    EDITOR="visualstudiocode"
+elif command -v subl &>/dev/null; then
+    EDITOR="sublimetext"
+elif command -v atom &>/dev/null; then
+    EDITOR="atom"
+elif command -v idea &>/dev/null; then
+    EDITOR="intellij"
+fi
+
+# get the os for the gitignore
+case "$OSTYPE" in
+darwin*) OS="macos" ;;
+linux*) OS="linux" ;;
+msys*) OS="windows" ;;
+*) OS="" ;;
+esac
+
+# set the language for gitignore
+case "$LANG" in
+js* | ts* | typescript* | javascript*)
+    ALT_LANG="node"
+    ;;
+*)
+    LANG=$lang
+    ;;
+esac
+
+# build gitignore
+if [ ! -z "$ALT_LANG" ]; then
+    ALL_GI_OPTS=$(echo ${OS},${EDITOR},${ALT_LANG})
+fi
+GI_OUTPUT="$(echo "${ALL_GI_OPTS}" | tr -d '[:space:]')"
+
+curl -L -s "https://gitignore.io/api/$GI_OUTPUT" 2>&1 >>.gitignore
+
+# build editorconfig
+cat >.editorconfig <<-EOM
+# editorconfig.org
+root = true
+
+[*]
+end_of_line = lf
+insert_final_newline = true
+charset = utf-8
+trim_trailing_whitespace=true
+
+[*.md]
+trim_trailing_whitespace = false
+EOM
+
+# get node command
+if command -v yarn &>/dev/null; then
+    NODE_CMD=yarn
+elif command -v npm &>/dev/null; then
+    NODE_CMD=npm
+else
+    "Can't find yarn or npm- are they installed?"
+fi
+
+# init by lang
+case "$LANG" in
+js* | ts* | typescript* | javascript*)
+    $NODE_CMD init -y >/dev/null 2>&1
+    ;;
+py* | python*)
+    touch requirements.txt
+    if command -v virtualenv &>/dev/null; then
+        virtualenv env &>/dev/null
+    fi
+    ;;
+rust*)
+    cargo init >/dev/null
+    ;;
+esac
+
+printf "${G}Done!\n
+What's left:
+• cd $1
+• Add indent style/spacing to .editorconfig
+• Add your name and the year to the LICENSE file
+• Write some code
+• ???
+• Profit${N}
+"
