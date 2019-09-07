@@ -36,6 +36,8 @@ LIC_OPTS="Choose one of the following:
 - MPL
 - Unlicense"
 
+command -v jq >/dev/null 2>&1 || { echo >&2 "Skeletor requires jq but it's not installed."; exit 1; }
+
 usage() {
     printf "%40s\n" ${Y}"${USAGE}${N}" 1>&2
     exit 1
@@ -162,9 +164,22 @@ else
     "Can't find yarn or npm- are they installed?"
 fi
 
+if [ $NODE_CMD = "yarn" ]; then
+    NODE_INSTALL="yarn add --dev"
+elif [ $NODE_CMD = "npm" ]; then
+    NODE_INSTALL="npm install --save-dev"
+else
+    "Can't find yarn or npm- are they installed?"
+fi
+
 # init by lang
 case "$LANG" in
-js* | ts* | typescript* | javascript*)
+ts* | typescript*)
+    $NODE_CMD init -y >/dev/null 2>&1
+    tsc --init >/dev/null 2>&1
+    $NODE_INSTALL typescript >/dev/null 2>&1
+    ;;
+js* | javascript*)
     $NODE_CMD init -y >/dev/null 2>&1
     ;;
 py* | python*)
